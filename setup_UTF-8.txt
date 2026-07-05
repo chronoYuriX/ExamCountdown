@@ -1,0 +1,28 @@
+﻿// Setup File
+
+const wchar_t
+	STR_ON_START[] = L"WARNING   还有_%d_天高考   WARNING",
+	STR_DISPLAY[] = L"距离2028高考还有%d年%02d小时%02d分钟%02d:%02d:%02d.%03d",
+	FONT_NAME[] = L"黑体";
+
+const int windowWidth = 600, windowHeight = 50, windowDistanceX = 0, windowDistanceY = 0;
+bool windowTopMost = 1;
+
+/***************
+ * [1] [2] [3] *
+ * [4] [5] [6] *
+ * [7] [8] [9] *
+ ***************/
+const BYTE windowLocation = 2;
+
+const float FPS = 10.f;
+const DWORD startDuration = 10000;
+const size_t strBufferSize = 64;
+HFONT hFont = CreateFontW(
+	24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+    CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+    DEFAULT_PITCH | FF_DONTCARE, FONT_NAME
+);
+COLORREF fontColor = RGB(255, 0, 0), backgroundColor = RGB(0, 0, 0), transparentColor = RGB(0, 0, 0);
+BYTE fontOpacity = 220;
