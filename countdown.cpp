@@ -16,7 +16,6 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <stdio.h>
 #include "setup_UTF-8.txt"
 
 
@@ -69,66 +68,96 @@ SYSTEMTIME datediff(SYSTEMTIME now, SYSTEMTIME until) {
 	return diff;
 }
 
+void WORDreplace(wchar_t* dst, DWORD maxlen, const wchar_t* format, ...) {
+	va_list nums;
+    va_start(nums, format);
+    DWORD i = 0;
+	for (DWORD j = 0; format[j] != L'\0' && i < maxlen; j++) {
+		if (format[j] == L'%') {
+			if (format[++j] == L'%') dst[i++] = L'%';
+			else {
+				WORD num = (WORD)va_arg(nums, int);
+				if (num == 0) {
+					if (format[j] == L'?') dst[i++] = L'0';
+					else {
+						DWORD end = format[j] - L'0' + i;
+						if (end >= maxlen) return;
+						while (i < end) dst[i++] = L'0';
+					}
+				} else {
+					BYTE maxbuf = format[j] - L'0', k = 0;
+					if (format[j] == L'?') maxbuf = 9;
+					else if (i + maxbuf >= maxlen) return;
+					wchar_t* reversed = (wchar_t*)__builtin_alloca(maxbuf * sizeof(wchar_t));
+					while (num > 0) {
+						reversed[k++] = num % 10 + L'0';
+						num /= 10;
+					}
+					if (format[j] != L'?') while (k < maxbuf) reversed[k++] = L'0';
+					else if (i + k >= maxlen) return;
+					while (k > 0) dst[i++] = reversed[--k];
+				}
+			}
+		} else dst[i++] = format[j];
+	}
+	va_end(nums);
+	dst[i] = L'\0';
+}
 
-
-HDC g_hdcMem;
-HBITMAP g_hbm;
+HDC hMemDC;
+HBITMAP hBitmap;
 DWORD startTick;
 
-void UpdateWindowContent(HWND hwnd) {
+void updateCountdown(HWND hwnd) {
     SYSTEMTIME st;
     GetLocalTime(&st);
-    wchar_t timeStr[strBufferSize];
-    if (GetTickCount() < startTick + startDuration) swprintf(
-		timeStr, strBufferSize, STR_ON_START, daysdiff(st, DAY_OF_JIHAD)
+    wchar_t time_str[strBufferSize];
+    if (GetTickCount() < startTick + startDuration) WORDreplace(
+		time_str, strBufferSize, STR_ON_START, daysdiff(st, DAY_OF_JIHAD)
 	);
 	else {
 		st = datediff(st, DAY_OF_JIHAD);
-		swprintf(
-			timeStr, strBufferSize, STR_DISPLAY,
+		WORDreplace(
+			time_str, strBufferSize, STR_DISPLAY,
 			st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds
 		);
 	}
 	
-    RECT rect = {0, 0, windowWidth, windowHeight};
+    RECT rect = { 0, 0, windowWidth, windowHeight };
     HBRUSH hBrush = CreateSolidBrush(backgroundColor);
-    FillRect(g_hdcMem, &rect, hBrush);
+    FillRect(hMemDC, &rect, hBrush);
     DeleteObject(hBrush);
-    SetBkMode(g_hdcMem, TRANSPARENT);
-    SetTextColor(g_hdcMem, fontColor);
-    SelectObject(g_hdcMem, hFont);
-    DrawTextW(g_hdcMem, timeStr, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SetBkMode(hMemDC, TRANSPARENT);
+    SetTextColor(hMemDC, fontColor);
+    SelectObject(hMemDC, hFont);
+    DrawTextW(hMemDC, time_str, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     DeleteObject(hFont);
-    HDC hdcScreen = GetDC(NULL);
-    BLENDFUNCTION blend = {};
-    blend.BlendOp = AC_SRC_OVER;
-    blend.SourceConstantAlpha = 220;
-    blend.AlphaFormat = 0;
-    POINT ptZero = {0, 0};
-    SIZE sizeWnd = {windowWidth, windowHeight};
-    UpdateLayeredWindow(hwnd, hdcScreen, NULL, &sizeWnd,
-                        g_hdcMem, &ptZero, transparentColor, &blend, ULW_COLORKEY);
-    ReleaseDC(NULL, hdcScreen);
+    HDC hScreenDC = GetDC(NULL);
+    BLENDFUNCTION blend = { AC_SRC_OVER, NULL, fontOpacity, 0 };
+    POINT p00 = { 0, 0 };
+    SIZE windowSize = { windowWidth, windowHeight };
+    UpdateLayeredWindow(hwnd, hScreenDC, NULL, &windowSize, hMemDC, &p00, transparentColor, &blend, ULW_COLORKEY);
+    ReleaseDC(NULL, hScreenDC);
 }
 
 LRESULT CALLBACK timerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     	case WM_CREATE: {
-            HDC hdcScreen = GetDC(NULL);
-            g_hdcMem = CreateCompatibleDC(hdcScreen);
-            g_hbm = CreateCompatibleBitmap(hdcScreen, windowWidth, windowHeight);
-            SelectObject(g_hdcMem, g_hbm);
-            ReleaseDC(NULL, hdcScreen);
+            HDC hScreenDC = GetDC(NULL);
+            hMemDC = CreateCompatibleDC(hScreenDC);
+            hBitmap = CreateCompatibleBitmap(hScreenDC, windowWidth, windowHeight);
+            SelectObject(hMemDC, hBitmap);
+            ReleaseDC(NULL, hScreenDC);
             SetTimer(hwnd, 1, DWORD(1000.f / FPS), NULL);
-        	UpdateWindowContent(hwnd);
+        	updateCountdown(hwnd);
         	break;
         }
-    	case WM_TIMER: UpdateWindowContent(hwnd); break;
+    	case WM_TIMER: updateCountdown(hwnd); break;
     	case WM_DESTROY: {
     		KillTimer(hwnd, 1);
-        	if (g_hdcMem) DeleteDC(g_hdcMem);
-        	if (g_hbm) DeleteObject(g_hbm);
+        	if (hMemDC) DeleteDC(hMemDC);
+        	if (hBitmap) DeleteObject(hBitmap);
         	PostQuitMessage(0);
 			break;
 		}
@@ -167,6 +196,7 @@ inline int getWindowLocY() {
 }
 
 int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
+	ShowWindow(GetConsoleWindow(), SW_HIDE);
 	startTick = GetTickCount();
     wchar_t randname[64];
     randClassNameW(randname, L"CYX_COUNTDOWN_", 63);
@@ -187,5 +217,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    ShowWindow(GetConsoleWindow(), SW_SHOW);
+    Sleep(1000);
     return 0;
 }
