@@ -15,8 +15,13 @@
  */
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
+#include <mmsystem.h>
 #include "setup_UTF-8.txt"
+
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "WINMM.LIB")
 
 
 const WORD ABSYEAR = 1601;
@@ -109,17 +114,17 @@ HBITMAP hBitmap;
 DWORD startTick;
 
 void updateCountdown(HWND hwnd) {
-    SYSTEMTIME st;
-    GetLocalTime(&st);
+    SYSTEMTIME date;
+    GetLocalTime(&date);
     wchar_t time_str[strBufferSize];
     if (GetTickCount() < startTick + startDuration) WORDreplace(
-		time_str, strBufferSize, STR_ON_START, daysdiff(st, DAY_OF_JIHAD)
+		time_str, strBufferSize, STR_ON_START, daysdiff(date, DAY_OF_JIHAD)
 	);
 	else {
-		st = datediff(st, DAY_OF_JIHAD);
+		date = datediff(date, DAY_OF_JIHAD);
 		WORDreplace(
 			time_str, strBufferSize, STR_DISPLAY,
-			st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds
+			date.wYear, date.wMonth, date.wDay, date.wHour, date.wMinute, date.wSecond, date.wMilliseconds
 		);
 	}
 	
@@ -195,6 +200,79 @@ inline int getWindowLocY() {
 	}
 }
 
+void sayNum(DWORD num) {
+	BYTE singleNums[10], i = 0, j = 0;
+	if (num != 0) while (num > 0) {
+		singleNums[i++] = num % 10;
+		num /= 10;
+	}
+	wchar_t* nameBuffer;
+	if (i == 0) {
+		nameBuffer = (wchar_t*)__builtin_alloca(sizeof(wchar_t) << 1);
+		nameBuffer[j++] = L'0';
+	} else {
+		nameBuffer = (wchar_t*)__builtin_alloca(i * sizeof(wchar_t) << 1);
+		bool continue0 = 0;
+		while (i > 0) {
+			if (singleNums[--i] == 0) {
+				continue0 = 1;
+				continue;
+			} else if (j != 0 && continue0) nameBuffer[j++] = L'0';
+			nameBuffer[j] = L'0' + singleNums[i];
+			switch (i) {
+				case 3: case 4: case 7: case 8: {
+					if (nameBuffer[j] == L'2' && ((j > 0 && nameBuffer[j - 1] != L's') || j == 0)) nameBuffer[j] = L'L';
+					switch (i) {
+						case 8: nameBuffer[++j] = L'y'; break;
+						case 4: nameBuffer[++j] = L'w'; break;
+						case 3: case 7: {
+							nameBuffer[++j] = L'q';
+							if (i == 7 && singleNums[4] | singleNums[5] | singleNums[6] == 0) nameBuffer[++j] = L'w';
+							break;
+						}
+					}
+					break;
+				}
+				case 2: case 6: {
+					nameBuffer[++j] = L'b';
+					if (i == 6 && singleNums[4] | singleNums[5] == 0) nameBuffer[++j] = L'w';
+					break;
+				}
+				case 1: case 5: case 9: {
+					if (nameBuffer[j] == L'1' && j == 0) nameBuffer[j] = L's';
+					else nameBuffer[++j] = L's';
+					if (singleNums[i - 1] == 0) {
+						if (i == 5) nameBuffer[++j] = L'w';
+						else if (i == 9) nameBuffer[++j] = L'y';
+					}
+					break;
+				}
+			}
+			j++;
+			continue0 = 0;
+		}
+	}
+	wchar_t pathBuffer[] = L".\\audio\\~.wav";
+	WORD replaceID = 0;
+	while (pathBuffer[replaceID] != L'\0') {
+		if (pathBuffer[replaceID] == L'~') {
+			for (i = 0; i < j; i++) {
+				pathBuffer[replaceID] = nameBuffer[i];
+				PlaySoundW(pathBuffer, NULL, SND_FILENAME | SND_SYNC);
+			}
+			break;
+		}
+	}
+}
+
+void sayWarning() {
+	SYSTEMTIME now;
+    GetLocalTime(&now);
+    PlaySoundW(L".\\audio\\head.wav", NULL, SND_FILENAME | SND_SYNC);
+    sayNum(daysdiff(date, DAY_OF_JIHAD));
+    PlaySoundW(L".\\audio\\tail.wav", NULL, SND_FILENAME | SND_SYNC);
+}
+
 int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
 	ShowWindow(GetConsoleWindow(), SW_HIDE);
 	startTick = GetTickCount();
@@ -212,6 +290,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
     );
     ShowWindow(hwnd, ncmdshow);
     if (windowTopMost) SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    sayWarning();
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
