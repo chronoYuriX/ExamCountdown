@@ -6,7 +6,7 @@ const wchar_t
 	FONT_NAME[] = L"黑体";
 
 const int windowWidth = 600, windowHeight = 50, windowDistanceX = 0, windowDistanceY = 0;
-bool windowTopMost = 1;
+bool windowTopMost = 1, hideCMD = 0;
 
 /***************
  * [1] [2] [3] *

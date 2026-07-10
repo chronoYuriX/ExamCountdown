@@ -109,6 +109,37 @@ void WORDreplace(wchar_t* dst, DWORD maxlen, const wchar_t* format, ...) {
 	dst[i] = L'\0';
 }
 
+void insertString(wchar_t* dst, DWORD maxlen, const wchar_t* origin, ...) {
+	va_list strs;
+    va_start(strs, origin);
+    DWORD i = 0;
+    for (DWORD j = 0; origin[j] != L'\0' && i < maxlen; j++) {
+    	if (origin[j] == L'~') {
+    		wchar_t* insert = va_arg(strs, wchar_t*);
+			for (DWORD k = 0; insert[k] != L'\0'; k++) {
+				if (i >= maxlen) break;
+				dst[i++] = insert[k];
+			}
+		} else dst[i++] = origin[j];
+	}
+	va_end(strs);
+	dst[i] = L'\0';
+}
+
+void connectString(wchar_t* origin, DWORD maxlen, const wchar_t* next, const wchar_t endl = L'\0') {
+	DWORD i = 0, j = 0;
+	bool startCopy = 0;
+	for (; next[j] != L'\0' && i < maxlen; i++) {
+		if (startCopy) origin[i] = next[j++];
+		else if (origin[i] == L'\0') {
+			startCopy = 1;
+			i--;
+		}
+	}
+	if (endl != L'\0' && i < maxlen) origin[i++] = endl;
+	origin[i] = L'\0';
+}
+
 HDC hMemDC;
 HBITMAP hBitmap;
 DWORD startTick;
@@ -127,7 +158,6 @@ void updateCountdown(HWND hwnd) {
 			date.wYear, date.wMonth, date.wDay, date.wHour, date.wMinute, date.wSecond, date.wMilliseconds
 		);
 	}
-	
     RECT rect = { 0, 0, windowWidth, windowHeight };
     HBRUSH hBrush = CreateSolidBrush(backgroundColor);
     FillRect(hMemDC, &rect, hBrush);
@@ -136,7 +166,6 @@ void updateCountdown(HWND hwnd) {
     SetTextColor(hMemDC, fontColor);
     SelectObject(hMemDC, hFont);
     DrawTextW(hMemDC, time_str, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
     DeleteObject(hFont);
     HDC hScreenDC = GetDC(NULL);
     BLENDFUNCTION blend = { AC_SRC_OVER, NULL, fontOpacity, 0 };
@@ -200,6 +229,11 @@ inline int getWindowLocY() {
 	}
 }
 
+bool noSuchFile(const wchar_t* path) {
+	DWORD fileAttributes = GetFileAttributesW(path);
+	return fileAttributes == INVALID_FILE_ATTRIBUTES || (fileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
 void sayNum(DWORD num) {
 	BYTE singleNums[10], i = 0, j = 0;
 	if (num != 0) while (num > 0) {
@@ -254,27 +288,56 @@ void sayNum(DWORD num) {
 	}
 	wchar_t pathBuffer[] = L".\\audio\\~.wav";
 	WORD replaceID = 0;
-	while (pathBuffer[replaceID] != L'\0') {
-		if (pathBuffer[replaceID] == L'~') {
-			for (i = 0; i < j; i++) {
-				pathBuffer[replaceID] = nameBuffer[i];
-				PlaySoundW(pathBuffer, NULL, SND_FILENAME | SND_SYNC);
-			}
-			break;
-		}
+	while (pathBuffer[replaceID] != L'\0') if (pathBuffer[++replaceID] == L'~') break;
+	for (i = 0; i < j; i++) {
+		pathBuffer[replaceID] = nameBuffer[i];
+		if (noSuchFile(pathBuffer)) PlaySoundW(L".\\audio\\void.wav", NULL, SND_FILENAME | SND_SYNC);
+		else PlaySoundW(pathBuffer, NULL, SND_FILENAME | SND_SYNC);
 	}
 }
 
 void sayWarning() {
 	SYSTEMTIME now;
     GetLocalTime(&now);
-    PlaySoundW(L".\\audio\\head.wav", NULL, SND_FILENAME | SND_SYNC);
-    sayNum(daysdiff(date, DAY_OF_JIHAD));
+    if (noSuchFile(L".\\audio\\head.wav")) PlaySoundW(L".\\audio\\void.wav", NULL, SND_FILENAME | SND_SYNC);
+    else PlaySoundW(L".\\audio\\head.wav", NULL, SND_FILENAME | SND_SYNC);
+    sayNum(daysdiff(now, DAY_OF_JIHAD));
+    if (noSuchFile(L".\\audio\\tail.wav")) PlaySoundW(L".\\audio\\void.wav", NULL, SND_FILENAME | SND_SYNC);
     PlaySoundW(L".\\audio\\tail.wav", NULL, SND_FILENAME | SND_SYNC);
 }
 
+bool checkResources() {
+	if (noSuchFile(L".\\audio\\void.wav")) {
+		MessageBoxW(NULL, L"File missing: .\\audio\\void.wav\nAudio modules will be disabled.", L"ERROR 1.1", MB_OK);
+		return 0;
+	}
+	const wchar_t numWavs[] = L"012L3456789gsbqwy";
+	wchar_t pathBuffer[] = L".\\audio\\~.wav", errorBuffer[1024] = L"%? files missing:\n";
+	WORD replaceID = 0, missingFiles = 0;
+	while (pathBuffer[replaceID] != L'\0') if (pathBuffer[++replaceID] == L'~') break;
+	if (noSuchFile(L".\\audio\\head.wav")) {
+		connectString(errorBuffer, 1024, L".\\audio\\head.wav", L'\n');
+		missingFiles++;
+	} if (noSuchFile(L".\\audio\\tail.wav")) {
+		connectString(errorBuffer, 1024, L".\\audio\\tail.wav", L'\n');
+		missingFiles++;
+	}
+	for (BYTE i = 0; numWavs[i] != L'\0'; i++) {
+		pathBuffer[replaceID] = numWavs[i];
+		if (noSuchFile(pathBuffer)) {
+			connectString(errorBuffer, 1024, pathBuffer, L'\n');
+			missingFiles++;
+		}
+	}
+	if (missingFiles == 0) return 1;
+	WORDreplace(errorBuffer, 1024, errorBuffer, missingFiles);
+	MessageBoxW(GetConsoleWindow(), errorBuffer, L"ERROR 1.2", MB_OK);
+	return 1;
+}
+
 int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
-	ShowWindow(GetConsoleWindow(), SW_HIDE);
+	bool activateAudio = checkResources();
+	if (hideCMD && activateAudio) ShowWindow(GetConsoleWindow(), SW_HIDE);
 	startTick = GetTickCount();
     wchar_t randname[64];
     randClassNameW(randname, L"CYX_COUNTDOWN_", 63);
@@ -290,7 +353,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
     );
     ShowWindow(hwnd, ncmdshow);
     if (windowTopMost) SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-    sayWarning();
+    if (activateAudio) sayWarning();
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
