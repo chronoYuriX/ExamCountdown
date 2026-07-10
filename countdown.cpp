@@ -140,6 +140,29 @@ void connectString(wchar_t* origin, DWORD maxlen, const wchar_t* next, const wch
 	origin[i] = L'\0';
 }
 
+bool isCommand(const wchar_t* input, DWORD maxinput, BYTE section, const wchar_t* command) {
+	bool continueSpace = 0;
+	for (DWORD i = 0, j = 0, currentSection = 0; i < maxinput; i++) {
+		switch (input[i]) {
+			case L'\r': case L'\n': case L'\0': return (currentSection == section && command[j] == L'\0') ||
+				(section > currentSection && command[0] == L'\0');
+			case L' ': {
+				if (currentSection == section && command[j] == L'\0') return 1;
+				if (continueSpace || currentSection >= section) break;
+				continueSpace = 1;
+				break;
+			}
+			default: {
+				if (continueSpace) {
+					currentSection++;
+					continueSpace = 0;
+				} if (currentSection == section && input[i] != command[j++]) return 0;
+			}
+		}
+	}
+	return 0;
+}
+
 HDC hMemDC;
 HBITMAP hBitmap;
 DWORD startTick;
@@ -188,6 +211,7 @@ LRESULT CALLBACK timerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         	break;
         }
     	case WM_TIMER: updateCountdown(hwnd); break;
+    	case WM_CLOSE: DestroyWindow(hwnd); break;
     	case WM_DESTROY: {
     		KillTimer(hwnd, 1);
         	if (hMemDC) DeleteDC(hMemDC);
@@ -335,22 +359,32 @@ bool checkResources() {
 	return 1;
 }
 
-int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
+void runCountdown(HINSTANCE hinstance, int ncmdshow) {
+	HANDLE hmutex = CreateMutexW(NULL, TRUE, L"CYX_COUNTDOWN_ACTIVATED"), hMapHWND = CreateFileMappingW(
+        INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HWND), L"Local\\CYX_COUNTDOWN_HWND"
+    );
 	bool activateAudio = checkResources();
 	if (hideCMD && activateAudio) ShowWindow(GetConsoleWindow(), SW_HIDE);
 	startTick = GetTickCount();
     wchar_t randname[64];
     randClassNameW(randname, L"CYX_COUNTDOWN_", 63);
-    WNDCLASSW wc = {};
+    WNDCLASSW wc = { 0 };
     wc.lpfnWndProc   = timerProc;
     wc.hInstance     = hinstance;
     wc.lpszClassName = randname;
     RegisterClassW(&wc);
     HWND hwnd = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW, randname, L"Countdown", WS_POPUP,
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW, randname, countdownWindowName, WS_POPUP,
         getWindowLocX(), getWindowLocY(), windowWidth, windowHeight, // Location Here!
 		NULL, NULL, hinstance, NULL
     );
+    if (hMapHWND) {
+        HWND* phwnd = (HWND*)MapViewOfFile(hMapHWND, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(HWND));
+        if (phwnd) {
+            *phwnd = hwnd;
+            UnmapViewOfFile(phwnd);
+        }
+    }
     ShowWindow(hwnd, ncmdshow);
     if (windowTopMost) SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     if (activateAudio) sayWarning();
@@ -360,6 +394,156 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
         DispatchMessage(&msg);
     }
     ShowWindow(GetConsoleWindow(), SW_SHOW);
-    Sleep(1000);
-    return 0;
+    ReleaseMutex(hmutex);
+    CloseHandle(hmutex);
+    if (hMapHWND) CloseHandle(hMapHWND);
+}
+
+struct IOPORT {
+	HANDLE hin, hout, herr;
+	IOPORT(): hin(GetStdHandle(STD_INPUT_HANDLE)), hout(GetStdHandle(STD_OUTPUT_HANDLE)),
+			herr(GetStdHandle(STD_ERROR_HANDLE)) {
+		DWORD currentMode;
+    	GetConsoleMode(hin, &currentMode);
+		SetConsoleMode(hin, currentMode | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
+	}
+	DWORD print(const wchar_t* str, DWORD len = ~0) {
+		if (len == ~0) len = wcslen(str);
+		DWORD written;
+		WriteConsoleW(hout, str, len, &written, NULL);
+		return written;
+	}
+	DWORD input(wchar_t* buffer, DWORD bufferSize) {
+		DWORD read;
+		ReadConsoleW(hin, buffer, bufferSize, &read, NULL);
+		return read;
+	}
+};
+
+namespace AUTOSTART {
+	bool isAutoStart() {
+		HKEY hkey = NULL;
+    	LONG result = RegOpenKeyExW(
+			HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &hkey
+    	);
+    	if (result != ERROR_SUCCESS) return 0;
+    	DWORD cbData = 0;
+    	result = RegQueryValueExW(hkey, L"CYX_COUNTDOWN", NULL, NULL, NULL, &cbData);
+    	if (result != ERROR_SUCCESS) {
+        	RegCloseKey(hkey);
+        	return 0;
+    	}
+    	wchar_t* regPath = (wchar_t*)__builtin_alloca(cbData);
+    	DWORD dwType = REG_SZ;
+    	result = RegQueryValueExW(hkey, L"CYX_COUNTDOWN", NULL, &dwType, (BYTE*)regPath, &cbData);
+    	RegCloseKey(hkey);
+    	if (result != ERROR_SUCCESS || dwType != REG_SZ) return 0;
+    	wchar_t curPath[MAX_PATH] = { 0 };
+    	GetModuleFileNameW(NULL, curPath, MAX_PATH);
+    	return CompareStringW(LOCALE_SYSTEM_DEFAULT, NORM_IGNORECASE, regPath, -1, curPath, -1) == CSTR_EQUAL;
+	}
+	const BYTE CHECK = 0, REG = 1, REMOVE = 2, FAILED = 100, SUCCEED = 101, NO = 200, YES = 201;
+}
+BYTE configAutoStart(BYTE mode) { // no OP required!
+	using namespace AUTOSTART;
+	HKEY hkey = NULL;
+    LONG result = RegOpenKeyExW(
+        HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        0, KEY_WRITE, &hkey
+    );
+    if (result != ERROR_SUCCESS) return 0;
+    switch (mode) {
+    	case CHECK: return isAutoStart() ? YES : NO;
+    	case REG: {
+    		if (isAutoStart()) break;
+    		wchar_t szPath[MAX_PATH] = { 0 };
+    		GetModuleFileNameW(NULL, szPath, MAX_PATH);
+    		result = RegSetValueExW(
+				hkey, L"CYX_COUNTDOWN", 0, REG_SZ, (const BYTE*)szPath, (wcslen(szPath) + 1) * sizeof(wchar_t)
+    		);
+			break;
+		}
+		case REMOVE: {
+			if (isAutoStart()) result = RegDeleteValueW(hkey, L"CYX_COUNTDOWN");
+			else result = __MSABI_LONG(15842);
+			break;
+		}
+	}
+    RegCloseKey(hkey);
+    return (result == ERROR_SUCCESS) ? SUCCEED : FAILED;
+}
+
+void runCMD() {
+	HWND hCMD = GetConsoleWindow();
+	if (hCMD == NULL) return;
+	if (IsIconic(hCMD) || !IsWindowVisible(hCMD)) ShowWindow(hCMD, SW_SHOW);
+	IOPORT io;
+	io.print(L"Running CMD...\nCountdown\\> ");
+	wchar_t inputBuffer[64] = L"__init";
+	while (inputBuffer[0] != L'\0') {
+		if (isCommand(inputBuffer, 64, 0, L"__init")) io.input(inputBuffer, 64);;
+		if (isCommand(inputBuffer, 64, 0, L"exit")) break;
+		if (isCommand(inputBuffer, 64, 0, L"shutdown")) {
+			if (isCommand(inputBuffer, 64, 1, L"byname")) {
+				HWND target = FindWindowW(NULL, countdownWindowName);
+				if (target) {
+					SendMessage(target, WM_CLOSE, 0, 0);
+					io.print(L"Operation succeed!\n");
+				} else io.print(L"Unknow error occurred. Couldn't close timer window...\n");
+			} else if (isCommand(inputBuffer, 64, 1, L"") || isCommand(inputBuffer, 64, 1, L"bysharedhwnd")) {
+				HANDLE hMapHWND = OpenFileMappingW(FILE_MAP_READ, FALSE, L"Local\\CYX_COUNTDOWN_HWND");
+    			if (hMapHWND) {
+        			HWND* phwnd = (HWND*)MapViewOfFile(hMapHWND, FILE_MAP_READ, 0, 0, sizeof(HWND));
+        			if (phwnd) {
+            			HWND target = *phwnd;
+            			UnmapViewOfFile(phwnd);
+            			if (IsWindow(target)) {
+                			SendMessage(target, WM_CLOSE, 0, 0);
+                			io.print(L"Operation succeed!\n");
+            			} else io.print(L"Timer window already closed.\n");
+        			}
+        			CloseHandle(hMapHWND);
+    			} else io.print(L"Unknow error occurred. Couldn't close timer window...\n");
+			} else io.print(L"Command \"shutdown\" doesn't have this parameter.\n");
+		} else if (isCommand(inputBuffer, 64, 0, L"autostart")) {
+			if (isCommand(inputBuffer, 64, 1, L"reg")) {
+				if (configAutoStart(AUTOSTART::REG) == AUTOSTART::SUCCEED) io.print(L"Registration succeed!\n");
+				else io.print(L"Registration failed!\n");
+			} else if (isCommand(inputBuffer, 64, 1, L"remove")) {
+				if (configAutoStart(AUTOSTART::REMOVE) == AUTOSTART::SUCCEED) io.print(L"Removed!\n");
+				else io.print(L"Failed to remove!\n");
+			} else if (isCommand(inputBuffer, 64, 1, L"check")) {
+				io.print(L"Registration mode: ");
+				if (configAutoStart(AUTOSTART::CHECK) == AUTOSTART::YES) io.print(L"Registrated!\n");
+				else io.print(L"Not registrated.\n");
+			} else io.print(L"Command \"autostart\" doesn't have this parameter.\n");
+		} else if (isCommand(inputBuffer, 64, 0, L"start")) {
+			HANDLE hmutex = OpenMutexW(SYNCHRONIZE, FALSE, L"CYX_COUNTDOWN_ACTIVATED");
+			if (hmutex == NULL) {
+				wchar_t path[MAX_PATH];
+            	GetModuleFileNameW(NULL, path, MAX_PATH);
+            	STARTUPINFOW si = { sizeof(si) };
+            	PROCESS_INFORMATION pi;
+            	if (CreateProcessW(path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+					io.print(L"Countdown started!\n");
+				else io.print(L"Couldn't create countdown process...\n");
+			} else io.print(L"Countdown already existed.\n");
+		} else io.print(L"No such command...\n");
+		io.print(L"Countdown\\> ");
+		io.input(inputBuffer, 64);
+	}
+	io.print(L"Exiting CMD...\n");
+}
+
+int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
+	HANDLE hmutex = OpenMutexW(SYNCHRONIZE, FALSE, L"CYX_COUNTDOWN_ACTIVATED");
+	if (hmutex == NULL) runCountdown(hinstance, ncmdshow);
+	else {
+		CloseHandle(hmutex);
+		runCMD();
+	}
+	IOPORT io;
+	io.print(L"Finish!\n");
+	Sleep(1000);
+	return 0;
 }

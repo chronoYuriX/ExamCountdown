@@ -3,10 +3,11 @@
 const wchar_t
 	STR_ON_START[] = L"WARNING   还有_%?_天高考   WARNING",
 	STR_DISPLAY[] = L"距离2028高考还有%?年%2月%2日%2:%2:%2.%3",
-	FONT_NAME[] = L"黑体";
+	FONT_NAME[] = L"黑体",
+	countdownWindowName[] = L"Countdown";
 
 const int windowWidth = 600, windowHeight = 50, windowDistanceX = 0, windowDistanceY = 0;
-bool windowTopMost = 1, hideCMD = 0;
+bool windowTopMost = 1, hideCMD = 1;
 
 /***************
  * [1] [2] [3] *
