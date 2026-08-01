@@ -364,7 +364,7 @@ void runCountdown(HINSTANCE hinstance, int ncmdshow) {
         INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HWND), L"Local\\CYX_COUNTDOWN_HWND"
     );
 	bool activateAudio = checkResources();
-	if (hideCMD && activateAudio) ShowWindow(GetConsoleWindow(), SW_HIDE);
+	if (hideCMD) ShowWindow(GetConsoleWindow(), SW_HIDE);
 	startTick = GetTickCount();
     wchar_t randname[64];
     randClassNameW(randname, L"CYX_COUNTDOWN_", 63);
