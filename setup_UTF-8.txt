@@ -1,13 +1,15 @@
 ﻿// Setup File
 
+const WORD YEAR_OF_JIHAD = 2028;
 const wchar_t
 	STR_ON_START[] = L"WARNING   还有_%?_天高考   WARNING",
-	STR_DISPLAY[] = L"距离2028高考还有%?年%2月%2日%2:%2:%2.%3",
+	STR_DISPLAY_A[] = L"距离%?高考还有%?年%?个月%?天%2:%2:%2.%3",
+	STR_DISPLAY_B[] = L"距离%?高考还有%?天%2:%2:%2.%3",
 	FONT_NAME[] = L"黑体",
 	countdownWindowName[] = L"Countdown";
 
-const int windowWidth = 600, windowHeight = 50, windowDistanceX = 0, windowDistanceY = 0;
-bool windowTopMost = 1, hideCMD = 1;
+const int windowWidth = 1000, windowHeight = 60, windowDistanceX = 0, windowDistanceY = 0;
+const bool windowTopMost = 1, hideCMD = 1;
 
 /***************
  * [1] [2] [3] *
@@ -17,13 +19,13 @@ bool windowTopMost = 1, hideCMD = 1;
 const BYTE windowLocation = 2;
 
 const float FPS = 10.f;
-const DWORD startDuration = 10000;
+const DWORD startDuration = 10000, displayCycle_A = 20000, displayCycle_B = 40000;
 const size_t strBufferSize = 64;
 HFONT hFont = CreateFontW(
-	24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-    CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-    DEFAULT_PITCH | FF_DONTCARE, FONT_NAME
+	50, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+	DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+	CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+	DEFAULT_PITCH | FF_DONTCARE, FONT_NAME
 );
 COLORREF fontColor = RGB(255, 0, 0), backgroundColor = RGB(0, 0, 0), transparentColor = RGB(0, 0, 0);
 BYTE fontOpacity = 220;

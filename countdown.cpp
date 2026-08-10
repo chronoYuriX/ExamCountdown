@@ -14,8 +14,13 @@
  ******************************************************************************************************
  */
 
+#define UNICODE
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#ifndef COUNTDOWN_NO_VISTA
+	#define WINVER       0x0600 // Windows Vista
+	#define _WIN32_WINNT 0x0600
+#endif
 #include <windows.h>
 #include <mmsystem.h>
 #include "setup_UTF-8.txt"
@@ -24,16 +29,18 @@
 #pragma comment(lib, "WINMM.LIB")
 
 
+const DWORD displayCycle = displayCycle_A + displayCycle_B;
 const WORD ABSYEAR = 1601;
 const SYSTEMTIME DAY_OF_JIHAD = {
-// [year] [month] [day of week] [day] [hour] [minute] [second] [milliseconds]
-    2028,  6,      NULL,         7,    9,     0,       0,       0
+// [year]         [month] [day of week] [day] [hour] [minute] [second] [milliseconds]
+    YEAR_OF_JIHAD, 6,      NULL,         7,    9,     0,       0,       0
 };
+
 inline bool is366days(WORD year) {
 	return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
 WORD getdays(WORD year, WORD month) {
-	const WORD days[12] = {31, 28, 31, 30, 31 ,30, 31, 31, 30, 31, 30, 31};
+	const WORD days[12] = { 31, 28, 31, 30, 31 ,30, 31, 31, 30, 31, 30, 31 };
 	if (month == 2 && is366days(year)) return 29;
 	return days[month - 1];
 }
@@ -48,29 +55,30 @@ DWORD daysdiff(SYSTEMTIME from, SYSTEMTIME to) {
 	return getABSdays(to) - getABSdays(from);
 }
 SYSTEMTIME datediff(SYSTEMTIME now, SYSTEMTIME until) {
-    SYSTEMTIME diff;
-	if (until.wMilliseconds < now.wMilliseconds) {
-		now.wSecond++; diff.wMilliseconds = 1000 - now.wMilliseconds + until.wMilliseconds;
-	} else diff.wMilliseconds = until.wMilliseconds - now.wMilliseconds;
-	if (until.wSecond < now.wSecond) {
-		now.wMinute++; diff.wSecond       = 60   - now.wSecond       + until.wSecond;
-	} else diff.wSecond       = until.wSecond       - now.wSecond;
-	if (until.wMinute < now.wMinute) {
-		now.wHour++;   diff.wMinute       = 60   - now.wMinute       + until.wMinute;
-	} else diff.wMinute       = until.wMinute       - now.wMinute;
-	if (until.wHour < now.wHour) {
-		now.wDay++;    diff.wHour         = 24   - now.wHour         + until.wHour;
-	} else diff.wHour         = until.wHour         - now.wHour;
-	if (until.wDay < now.wDay) {
-		now.wMonth++;
-		diff.wDay = getdays(now.wYear, now.wMonth) - now.wDay + until.wDay;
-	} else diff.wDay          = until.wDay          - now.wDay;
-	if (until.wMonth < now.wMonth) {
-		now.wYear++;   diff.wMonth        = 12   - now.wMonth        + until.wMonth;
-	} else diff.wSecond       = until.wSecond       - now.wSecond;
-	if (until.wYear < now.wYear) { SYSTEMTIME zero = { 0 }; return zero; }
-	diff.wYear = until.wYear - now.wYear;
-	return diff;
+    SYSTEMTIME diff = { 0 };
+    if (until.wMilliseconds < now.wMilliseconds) {
+        now.wSecond++; diff.wMilliseconds = 1000 - now.wMilliseconds + until.wMilliseconds;
+    } else diff.wMilliseconds = until.wMilliseconds - now.wMilliseconds;
+    if (until.wSecond < now.wSecond) {
+        now.wMinute++; diff.wSecond = 60 - now.wSecond + until.wSecond;
+    } else diff.wSecond = until.wSecond - now.wSecond;
+    if (until.wMinute < now.wMinute) {
+        now.wHour++;   diff.wMinute = 60 - now.wMinute + until.wMinute;
+    } else diff.wMinute = until.wMinute - now.wMinute;
+    if (until.wHour < now.wHour) {
+        now.wDay++;    diff.wHour = 24 - now.wHour + until.wHour;
+    } else diff.wHour   = until.wHour - now.wHour;
+    if (until.wDay < now.wDay) {
+        if (now.wMonth == 1) { now.wMonth = 12; now.wYear--; } // Back to last year
+		else now.wMonth--;
+        diff.wDay = getdays(now.wYear, now.wMonth) - now.wDay + until.wDay;
+    } else diff.wDay    = until.wDay - now.wDay;
+    if (until.wMonth < now.wMonth) {
+        now.wYear++;   diff.wMonth = 12 - now.wMonth + until.wMonth;
+    } else diff.wMonth  = until.wMonth - now.wMonth;
+    if (until.wYear < now.wYear) return { 0 };
+    diff.wYear = until.wYear - now.wYear;
+    return diff;
 }
 
 void WORDreplace(wchar_t* dst, DWORD maxlen, const wchar_t* format, ...) {
@@ -108,7 +116,6 @@ void WORDreplace(wchar_t* dst, DWORD maxlen, const wchar_t* format, ...) {
 	va_end(nums);
 	dst[i] = L'\0';
 }
-
 void insertString(wchar_t* dst, DWORD maxlen, const wchar_t* origin, ...) {
 	va_list strs;
     va_start(strs, origin);
@@ -125,7 +132,6 @@ void insertString(wchar_t* dst, DWORD maxlen, const wchar_t* origin, ...) {
 	va_end(strs);
 	dst[i] = L'\0';
 }
-
 void connectString(wchar_t* origin, DWORD maxlen, const wchar_t* next, const wchar_t endl = L'\0') {
 	DWORD i = 0, j = 0;
 	bool startCopy = 0;
@@ -151,8 +157,7 @@ bool isCommand(const wchar_t* input, DWORD maxinput, BYTE section, const wchar_t
 				if (continueSpace || currentSection >= section) break;
 				continueSpace = 1;
 				break;
-			}
-			default: {
+			} default: {
 				if (continueSpace) {
 					currentSection++;
 					continueSpace = 0;
@@ -166,20 +171,22 @@ bool isCommand(const wchar_t* input, DWORD maxinput, BYTE section, const wchar_t
 HDC hMemDC;
 HBITMAP hBitmap;
 DWORD startTick;
-
 void updateCountdown(HWND hwnd) {
-    SYSTEMTIME date;
-    GetLocalTime(&date);
+	static bool firstTickCycle = 1;
+    SYSTEMTIME date; GetLocalTime(&date);
+    DWORD tick = GetTickCount();
     wchar_t time_str[strBufferSize];
-    if (GetTickCount() < startTick + startDuration) WORDreplace(
-		time_str, strBufferSize, STR_ON_START, daysdiff(date, DAY_OF_JIHAD)
-	);
+    if ((tick < startTick + startDuration) && firstTickCycle) WORDreplace(
+		time_str, strBufferSize, STR_ON_START, daysdiff(date, DAY_OF_JIHAD));
 	else {
-		date = datediff(date, DAY_OF_JIHAD);
-		WORDreplace(
-			time_str, strBufferSize, STR_DISPLAY,
-			date.wYear, date.wMonth, date.wDay, date.wHour, date.wMinute, date.wSecond, date.wMilliseconds
-		);
+		firstTickCycle = 0;
+		SYSTEMTIME diff = datediff(date, DAY_OF_JIHAD);
+		if (tick % displayCycle < displayCycle_A) WORDreplace(
+			time_str, strBufferSize, STR_DISPLAY_A, YEAR_OF_JIHAD,
+			diff.wYear, diff.wMonth, diff.wDay, diff.wHour, diff.wMinute, diff.wSecond, diff.wMilliseconds);
+		else WORDreplace(
+			time_str, strBufferSize, STR_DISPLAY_B, YEAR_OF_JIHAD,
+			daysdiff(date, DAY_OF_JIHAD), diff.wHour, diff.wMinute, diff.wSecond, diff.wMilliseconds);
 	}
     RECT rect = { 0, 0, windowWidth, windowHeight };
     HBRUSH hBrush = CreateSolidBrush(backgroundColor);
@@ -189,8 +196,7 @@ void updateCountdown(HWND hwnd) {
     SetTextColor(hMemDC, fontColor);
     SelectObject(hMemDC, hFont);
     DrawTextW(hMemDC, time_str, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    DeleteObject(hFont);
-    HDC hScreenDC = GetDC(NULL);
+	HDC hScreenDC = GetDC(NULL);
     BLENDFUNCTION blend = { AC_SRC_OVER, NULL, fontOpacity, 0 };
     POINT p00 = { 0, 0 };
     SIZE windowSize = { windowWidth, windowHeight };
@@ -209,18 +215,18 @@ LRESULT CALLBACK timerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SetTimer(hwnd, 1, DWORD(1000.f / FPS), NULL);
         	updateCountdown(hwnd);
         	break;
-        }
-    	case WM_TIMER: updateCountdown(hwnd); break;
+        } case WM_TIMER: updateCountdown(hwnd); break;
     	case WM_CLOSE: DestroyWindow(hwnd); break;
     	case WM_DESTROY: {
     		KillTimer(hwnd, 1);
         	if (hMemDC) DeleteDC(hMemDC);
         	if (hBitmap) DeleteObject(hBitmap);
+        	if (hFont) DeleteObject(hFont);
         	PostQuitMessage(0);
-			break;
-		}
+        	break;
+		} default: return DefWindowProcW(hwnd, msg, wParam, lParam);
 	}
-    return DefWindowProc(hwnd, msg, wParam, lParam);
+	return 0;
 }
 
 void randClassNameW(wchar_t* des, const wchar_t* header, WORD namelen) {
@@ -286,24 +292,20 @@ void sayNum(DWORD num) {
 						case 3: case 7: {
 							nameBuffer[++j] = L'q';
 							if (i == 7 && singleNums[4] | singleNums[5] | singleNums[6] == 0) nameBuffer[++j] = L'w';
-							break;
 						}
 					}
 					break;
-				}
-				case 2: case 6: {
+				} case 2: case 6: {
 					nameBuffer[++j] = L'b';
 					if (i == 6 && singleNums[4] | singleNums[5] == 0) nameBuffer[++j] = L'w';
 					break;
-				}
-				case 1: case 5: case 9: {
+				} case 1: case 5: case 9: {
 					if (nameBuffer[j] == L'1' && j == 0) nameBuffer[j] = L's';
 					else nameBuffer[++j] = L's';
 					if (singleNums[i - 1] == 0) {
 						if (i == 5) nameBuffer[++j] = L'w';
 						else if (i == 9) nameBuffer[++j] = L'y';
 					}
-					break;
 				}
 			}
 			j++;
@@ -332,7 +334,8 @@ void sayWarning() {
 
 bool checkResources() {
 	if (noSuchFile(L".\\audio\\void.wav")) {
-		MessageBoxW(NULL, L"File missing: .\\audio\\void.wav\nAudio modules will be disabled.", L"ERROR 1.1", MB_OK);
+		MessageBoxW(NULL, L"File missing: .\\audio\\void.wav\nAudio modules will be disabled.", L"ERROR 1.1",
+			MB_ICONEXCLAMATION | MB_OK);
 		return 0;
 	}
 	const wchar_t numWavs[] = L"012L3456789gsbqwy";
@@ -355,7 +358,7 @@ bool checkResources() {
 	}
 	if (missingFiles == 0) return 1;
 	WORDreplace(errorBuffer, 1024, errorBuffer, missingFiles);
-	MessageBoxW(GetConsoleWindow(), errorBuffer, L"ERROR 1.2", MB_OK);
+	MessageBoxW(GetConsoleWindow(), errorBuffer, L"ERROR 1.2", MB_ICONEXCLAMATION | MB_OK);
 	return 1;
 }
 
@@ -363,8 +366,8 @@ void runCountdown(HINSTANCE hinstance, int ncmdshow) {
 	HANDLE hmutex = CreateMutexW(NULL, TRUE, L"CYX_COUNTDOWN_ACTIVATED"), hMapHWND = CreateFileMappingW(
         INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HWND), L"Local\\CYX_COUNTDOWN_HWND"
     );
+    if (hideCMD) ShowWindow(GetConsoleWindow(), SW_HIDE);
 	bool activateAudio = checkResources();
-	if (hideCMD) ShowWindow(GetConsoleWindow(), SW_HIDE);
 	startTick = GetTickCount();
     wchar_t randname[64];
     randClassNameW(randname, L"CYX_COUNTDOWN_", 63);
@@ -376,8 +379,7 @@ void runCountdown(HINSTANCE hinstance, int ncmdshow) {
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW, randname, countdownWindowName, WS_POPUP,
         getWindowLocX(), getWindowLocY(), windowWidth, windowHeight, // Location Here!
-		NULL, NULL, hinstance, NULL
-    );
+		NULL, NULL, hinstance, NULL);
     if (hMapHWND) {
         HWND* phwnd = (HWND*)MapViewOfFile(hMapHWND, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(HWND));
         if (phwnd) {
@@ -389,9 +391,9 @@ void runCountdown(HINSTANCE hinstance, int ncmdshow) {
     if (windowTopMost) SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     if (activateAudio) sayWarning();
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    while (GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
     ShowWindow(GetConsoleWindow(), SW_SHOW);
     ReleaseMutex(hmutex);
@@ -424,8 +426,7 @@ namespace AUTOSTART {
 	bool isAutoStart() {
 		HKEY hkey = NULL;
     	LONG result = RegOpenKeyExW(
-			HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &hkey
-    	);
+			HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &hkey);
     	if (result != ERROR_SUCCESS) return 0;
     	DWORD cbData = 0;
     	result = RegQueryValueExW(hkey, L"CYX_COUNTDOWN", NULL, NULL, NULL, &cbData);
@@ -449,24 +450,20 @@ BYTE configAutoStart(BYTE mode) { // no OP required!
 	HKEY hkey = NULL;
     LONG result = RegOpenKeyExW(
         HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-        0, KEY_WRITE, &hkey
-    );
+        0, KEY_WRITE, &hkey);
     if (result != ERROR_SUCCESS) return 0;
     switch (mode) {
     	case CHECK: return isAutoStart() ? YES : NO;
     	case REG: {
     		if (isAutoStart()) break;
-    		wchar_t szPath[MAX_PATH] = { 0 };
-    		GetModuleFileNameW(NULL, szPath, MAX_PATH);
+    		wchar_t path[MAX_PATH] = { 0 };
+    		GetModuleFileNameW(NULL, path, MAX_PATH);
     		result = RegSetValueExW(
-				hkey, L"CYX_COUNTDOWN", 0, REG_SZ, (const BYTE*)szPath, (wcslen(szPath) + 1) * sizeof(wchar_t)
-    		);
+				hkey, L"CYX_COUNTDOWN_", 0, REG_SZ, (const BYTE*)path, (wcslen(path) + 1) * sizeof(wchar_t));
 			break;
-		}
-		case REMOVE: {
-			if (isAutoStart()) result = RegDeleteValueW(hkey, L"CYX_COUNTDOWN");
+		} case REMOVE: {
+			if (isAutoStart()) result = RegDeleteValueW(hkey, L"CYX_COUNTDOWN_");
 			else result = __MSABI_LONG(15842);
-			break;
 		}
 	}
     RegCloseKey(hkey);
@@ -536,6 +533,9 @@ void runCMD() {
 }
 
 int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int ncmdshow) {
+	#ifndef COUNTDOWN_NO_VISTA
+		SetProcessDPIAware();
+	#endif
 	HANDLE hmutex = OpenMutexW(SYNCHRONIZE, FALSE, L"CYX_COUNTDOWN_ACTIVATED");
 	if (hmutex == NULL) runCountdown(hinstance, ncmdshow);
 	else {
