@@ -31,9 +31,9 @@
 
 const DWORD displayCycle = displayCycle_A + displayCycle_B;
 const WORD ABSYEAR = 1601;
-const SYSTEMTIME DAY_OF_JIHAD = {
+const SYSTEMTIME DAY_OF_EXAM = {
 // [year]         [month] [day of week] [day] [hour] [minute] [second] [milliseconds]
-    YEAR_OF_JIHAD, 6,      NULL,         7,    9,     0,       0,       0
+    YEAR_OF_EXAM, 6,      NULL,         7,    9,     0,       0,       0
 };
 
 inline bool is366days(WORD year) {
@@ -177,16 +177,16 @@ void updateCountdown(HWND hwnd) {
     DWORD tick = GetTickCount();
     wchar_t time_str[strBufferSize];
     if ((tick < startTick + startDuration) && firstTickCycle) WORDreplace(
-		time_str, strBufferSize, STR_ON_START, daysdiff(date, DAY_OF_JIHAD));
+		time_str, strBufferSize, STR_ON_START, daysdiff(date, DAY_OF_EXAM));
 	else {
 		firstTickCycle = 0;
-		SYSTEMTIME diff = datediff(date, DAY_OF_JIHAD);
+		SYSTEMTIME diff = datediff(date, DAY_OF_EXAM);
 		if (tick % displayCycle < displayCycle_A) WORDreplace(
-			time_str, strBufferSize, STR_DISPLAY_A, YEAR_OF_JIHAD,
+			time_str, strBufferSize, STR_DISPLAY_A, YEAR_OF_EXAM,
 			diff.wYear, diff.wMonth, diff.wDay, diff.wHour, diff.wMinute, diff.wSecond, diff.wMilliseconds);
 		else WORDreplace(
-			time_str, strBufferSize, STR_DISPLAY_B, YEAR_OF_JIHAD,
-			daysdiff(date, DAY_OF_JIHAD), diff.wHour, diff.wMinute, diff.wSecond, diff.wMilliseconds);
+			time_str, strBufferSize, STR_DISPLAY_B, YEAR_OF_EXAM,
+			daysdiff(date, DAY_OF_EXAM), diff.wHour, diff.wMinute, diff.wSecond, diff.wMilliseconds);
 	}
     RECT rect = { 0, 0, windowWidth, windowHeight };
     HBRUSH hBrush = CreateSolidBrush(backgroundColor);
@@ -327,7 +327,7 @@ void sayWarning() {
     GetLocalTime(&now);
     if (noSuchFile(L".\\audio\\head.wav")) PlaySoundW(L".\\audio\\void.wav", NULL, SND_FILENAME | SND_SYNC);
     else PlaySoundW(L".\\audio\\head.wav", NULL, SND_FILENAME | SND_SYNC);
-    sayNum(daysdiff(now, DAY_OF_JIHAD));
+    sayNum(daysdiff(now, DAY_OF_EXAM));
     if (noSuchFile(L".\\audio\\tail.wav")) PlaySoundW(L".\\audio\\void.wav", NULL, SND_FILENAME | SND_SYNC);
     PlaySoundW(L".\\audio\\tail.wav", NULL, SND_FILENAME | SND_SYNC);
 }

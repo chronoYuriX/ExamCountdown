@@ -1,6 +1,6 @@
 ﻿// Setup File
 
-const WORD YEAR_OF_JIHAD = 2028;
+const WORD YEAR_OF_EXAM = 2028;
 const wchar_t
 	STR_ON_START[] = L"WARNING   还有_%?_天高考   WARNING",
 	STR_DISPLAY_A[] = L"距离%?高考还有%?年%?个月%?天%2:%2:%2.%3",
