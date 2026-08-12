@@ -54,6 +54,7 @@ DWORD getABSdays(SYSTEMTIME date) {
 DWORD daysdiff(SYSTEMTIME from, SYSTEMTIME to) {
 	return getABSdays(to) - getABSdays(from);
 }
+/*
 SYSTEMTIME datediff(SYSTEMTIME now, SYSTEMTIME until) {
     SYSTEMTIME diff = { 0 };
     if (until.wMilliseconds < now.wMilliseconds) {
@@ -79,6 +80,31 @@ SYSTEMTIME datediff(SYSTEMTIME now, SYSTEMTIME until) {
     if (until.wYear < now.wYear) return { 0 };
     diff.wYear = until.wYear - now.wYear;
     return diff;
+}*/
+SYSTEMTIME datediff(SYSTEMTIME now, SYSTEMTIME until) {
+    SYSTEMTIME diff;
+	if (until.wMilliseconds < now.wMilliseconds) {
+		now.wSecond++; diff.wMilliseconds = 1000 - now.wMilliseconds + until.wMilliseconds;
+	} else diff.wMilliseconds = until.wMilliseconds - now.wMilliseconds;
+	if (until.wSecond < now.wSecond) {
+		now.wMinute++; diff.wSecond       = 60   - now.wSecond       + until.wSecond;
+	} else diff.wSecond       = until.wSecond       - now.wSecond;
+	if (until.wMinute < now.wMinute) {
+		now.wHour++;   diff.wMinute       = 60   - now.wMinute       + until.wMinute;
+	} else diff.wMinute       = until.wMinute       - now.wMinute;
+	if (until.wHour < now.wHour) {
+		now.wDay++;    diff.wHour         = 24   - now.wHour         + until.wHour;
+	} else diff.wHour         = until.wHour         - now.wHour;
+	if (until.wDay < now.wDay) {
+		now.wMonth++;
+		diff.wDay = getdays(now.wYear, now.wMonth) - now.wDay + until.wDay;
+	} else diff.wDay          = until.wDay          - now.wDay;
+	if (until.wMonth < now.wMonth) {
+		now.wYear++;   diff.wMonth        = 12   - now.wMonth        + until.wMonth;
+	} else diff.wSecond       = until.wSecond       - now.wSecond;
+	if (until.wYear < now.wYear) { SYSTEMTIME zero = { 0 }; return zero; }
+	diff.wYear = until.wYear - now.wYear;
+	return diff;
 }
 
 void WORDreplace(wchar_t* dst, DWORD maxlen, const wchar_t* format, ...) {
